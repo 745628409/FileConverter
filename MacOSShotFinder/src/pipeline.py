@@ -9,12 +9,14 @@ from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from models import IndexData, Shot
-from recognition import detect_actors, load_actor_references
+from recognition import detect_actor_scores, load_actor_references, pick_actors
 from video_analysis import (
     detect_shots,
-    estimate_effect_tags,
+    estimate_effect_scores,
     estimate_visual_tags,
     extract_frame_at,
+    pick_effects,
+    sample_times,
     write_thumbnail,
 )
 
@@ -55,7 +57,40 @@ def build_feature_text(tags: List[str], effects: List[str], actors: List[str], t
     return "。".join(blocks) + "。"
 
 
-def build_index(video_path: Path, project_dir: Path) -> IndexData:
+def _merge_effect_scores(score_rows: List[Dict[str, float]]) -> Dict[str, float]:
+    merged: Dict[str, List[float]] = {}
+    for row in score_rows:
+        for k, v in row.items():
+            merged.setdefault(k, []).append(v)
+    return {k: float(np.mean(vals)) for k, vals in merged.items()}
+
+
+def _temporal_refine(shots: List[Shot]) -> None:
+    # 邻域平滑：当相邻镜头同类信息强一致时，补齐中间弱漏检
+    for i in range(1, len(shots) - 1):
+        prev_shot = shots[i - 1]
+        cur = shots[i]
+        next_shot = shots[i + 1]
+
+        prev_actors = set(prev_shot.actors)
+        next_actors = set(next_shot.actors)
+        shared_actor = prev_actors.intersection(next_actors)
+        for actor in shared_actor:
+            if actor not in cur.actors and cur.actor_scores.get(actor, 0.0) >= 0.14:
+                cur.actors.append(actor)
+
+        prev_fx = set(prev_shot.effects)
+        next_fx = set(next_shot.effects)
+        shared_fx = prev_fx.intersection(next_fx)
+        for fx in shared_fx:
+            if fx not in cur.effects and cur.effect_scores.get(fx, 0.0) >= 0.30:
+                cur.effects.append(fx)
+
+        cur.actors = sorted(set(cur.actors))
+        cur.effects = sorted(set(cur.effects))
+
+
+def build_index(video_path: Path, project_dir: Path, high_accuracy: bool = True) -> IndexData:
     shots_raw = detect_shots(video_path)
     segments = try_transcribe(video_path)
     actor_refs = load_actor_references(project_dir / "actors")
@@ -68,11 +103,24 @@ def build_index(video_path: Path, project_dir: Path) -> IndexData:
     thumb_dir = project_dir / "thumbnails"
     for i, raw in enumerate(shots_raw):
         mid = (raw.start_sec + raw.end_sec) / 2
-        frame = extract_frame_at(video_path, mid)
 
-        tags = estimate_visual_tags(frame)
-        effects = estimate_effect_tags(frame)
-        actors = detect_actors(frame, actor_refs)
+        times = sample_times(raw.start_sec, raw.end_sec, 3 if high_accuracy else 1)
+        frames = [extract_frame_at(video_path, t) for t in times]
+        frame = frames[len(frames) // 2]
+
+        tag_votes: Dict[str, int] = {}
+        for frm in frames:
+            for tg in estimate_visual_tags(frm):
+                tag_votes[tg] = tag_votes.get(tg, 0) + 1
+        tags = sorted([k for k, c in tag_votes.items() if c >= 1 + int(high_accuracy)])
+
+        effect_score_rows = [estimate_effect_scores(frm) for frm in frames]
+        effect_scores = _merge_effect_scores(effect_score_rows)
+        effects = pick_effects(effect_scores, threshold=0.45 if high_accuracy else 0.55)
+
+        actor_scores = detect_actor_scores(frames, actor_refs)
+        actors = pick_actors(actor_scores, threshold=0.20 if high_accuracy else 0.25)
+
         transcript = transcript_for_shot(segments, raw.start_sec, raw.end_sec)
         feature_text = build_feature_text(tags, effects, actors, transcript)
 
@@ -88,11 +136,21 @@ def build_index(video_path: Path, project_dir: Path) -> IndexData:
             transcript=transcript,
             tags=tags,
             actors=actors,
+            actor_scores=actor_scores,
             effects=effects,
+            effect_scores=effect_scores,
             feature_text=feature_text,
         )
         shots.append(shot)
         feature_texts.append(feature_text)
+
+    _temporal_refine(shots)
+
+    # temporal refine 后重建 feature_text
+    feature_texts = []
+    for shot in shots:
+        shot.feature_text = build_feature_text(shot.tags, shot.effects, shot.actors, shot.transcript)
+        feature_texts.append(shot.feature_text)
 
     embeddings = model.encode(feature_texts, normalize_embeddings=True).tolist() if feature_texts else []
 
@@ -161,18 +219,20 @@ def search(index_data: IndexData, query: str, top_k: int = 12):
 
     boost = np.zeros(len(index_data.shots), dtype=float)
     for i, shot in enumerate(index_data.shots):
-        if actor_need and actor_need.intersection(set(shot.actors)):
-            boost[i] += 0.25
-        if effect_need and effect_need.intersection(set(shot.effects)):
-            boost[i] += 0.2
+        matched_actor = actor_need.intersection(set(shot.actors))
+        matched_effect = effect_need.intersection(set(shot.effects))
 
-        # 对明显关键词增加额外排序偏好
+        if matched_actor:
+            boost[i] += 0.18 + max(shot.actor_scores.get(a, 0.0) for a in matched_actor) * 0.22
+        if matched_effect:
+            boost[i] += 0.14 + max(shot.effect_scores.get(e, 0.0) for e in matched_effect) * 0.18
+
         text = shot.feature_text.lower()
         for token in re.findall(r"\w+", query.lower()):
             if token and token in text:
-                boost[i] += 0.01
+                boost[i] += 0.008
 
-    final_score = 0.58 * sem_sims + 0.30 * kw_sims + 0.12 * boost
+    final_score = 0.55 * sem_sims + 0.30 * kw_sims + 0.15 * _normalize(boost)
 
     order = np.argsort(-final_score)[:top_k]
     results = []

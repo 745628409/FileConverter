@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import cv2
 import numpy as np
 
@@ -18,12 +18,12 @@ def _extract_face_descriptors(image: np.ndarray) -> List[np.ndarray]:
     detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = detector.detectMultiScale(gray, 1.1, 4)
 
-    orb = cv2.ORB_create(nfeatures=300)
+    orb = cv2.ORB_create(nfeatures=350)
     descs: List[np.ndarray] = []
     for (x, y, w, h) in faces:
         face = gray[y : y + h, x : x + w]
         _kps, desc = orb.detectAndCompute(face, None)
-        if desc is not None and len(desc) > 12:
+        if desc is not None and len(desc) > 16:
             descs.append(desc)
     return descs
 
@@ -66,22 +66,31 @@ def _match_score(desc_a: np.ndarray, desc_b: np.ndarray) -> float:
     return good / total
 
 
-def detect_actors(frame: np.ndarray, refs: List[ActorReference], threshold: float = 0.18) -> List[str]:
-    if not refs:
-        return []
-    shot_descs = _extract_face_descriptors(frame)
-    if not shot_descs:
-        return []
+def detect_actor_scores(frames: List[np.ndarray], refs: List[ActorReference]) -> Dict[str, float]:
+    if not refs or not frames:
+        return {}
 
-    found: List[str] = []
+    frame_descs = []
+    for frame in frames:
+        frame_descs.extend(_extract_face_descriptors(frame))
+
+    if not frame_descs:
+        return {}
+
+    scores: Dict[str, float] = {}
     for actor in refs:
-        best = 0.0
-        for sd in shot_descs:
-            for rd in actor.descriptors[:8]:
-                best = max(best, _match_score(sd, rd))
-                if best >= threshold:
-                    found.append(actor.name)
-                    break
-            if actor.name in found:
-                break
-    return sorted(set(found))
+        local_scores: List[float] = []
+        for sd in frame_descs:
+            for rd in actor.descriptors[:10]:
+                local_scores.append(_match_score(sd, rd))
+        if not local_scores:
+            continue
+        # 用 top-k 均值减少偶然误匹配
+        top = sorted(local_scores, reverse=True)[:8]
+        scores[actor.name] = float(np.mean(top))
+
+    return scores
+
+
+def pick_actors(scores: Dict[str, float], threshold: float = 0.20) -> List[str]:
+    return sorted([name for name, score in scores.items() if score >= threshold])

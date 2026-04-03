@@ -16,7 +16,9 @@ class Shot:
     transcript: str
     tags: List[str]
     actors: List[str]
+    actor_scores: Dict[str, float]
     effects: List[str]
+    effect_scores: Dict[str, float]
     feature_text: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -25,7 +27,9 @@ class Shot:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Shot":
         data.setdefault("actors", [])
+        data.setdefault("actor_scores", {})
         data.setdefault("effects", [])
+        data.setdefault("effect_scores", {})
         return cls(**data)
 
 

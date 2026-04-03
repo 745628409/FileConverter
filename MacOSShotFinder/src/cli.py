@@ -15,6 +15,7 @@ def main():
     idx = sub.add_parser("index")
     idx.add_argument("--video", required=True)
     idx.add_argument("--project", required=True)
+    idx.add_argument("--fast", action="store_true", help="启用快速索引（降低精度）")
 
     s = sub.add_parser("search")
     s.add_argument("--project", required=True)
@@ -24,7 +25,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "index":
-        data = build_index(Path(args.video), Path(args.project))
+        data = build_index(Path(args.video), Path(args.project), high_accuracy=not args.fast)
         print(f"Indexed {len(data.shots)} shots into {args.project}")
     elif args.cmd == "search":
         data = IndexData.load(Path(args.project))
@@ -32,7 +33,7 @@ def main():
         for i, row in enumerate(rows, start=1):
             shot = row["shot"]
             print(
-                f"#{i} score={row['score']:.3f}  "
+                f"#{i} score={row['score']:.3f} sem={row['semantic']:.3f} kw={row['keyword']:.3f} boost={row['boost']:.3f}\n"
                 f"{sec_to_timecode(shot.start_sec)} - {sec_to_timecode(shot.end_sec)}  "
                 f"thumb={shot.thumbnail_path}\n"
                 f"tags={','.join(shot.tags)}\n"

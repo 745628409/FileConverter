@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 import cv2
 import numpy as np
 
@@ -63,6 +63,16 @@ def detect_shots(video_path: Path, sample_fps: float = 2.0, threshold: float = 0
     return shots
 
 
+def sample_times(start_sec: float, end_sec: float, count: int = 3) -> List[float]:
+    if end_sec <= start_sec:
+        return [start_sec]
+    if count <= 1:
+        return [(start_sec + end_sec) / 2]
+
+    span = end_sec - start_sec
+    return [start_sec + span * (i + 1) / (count + 1) for i in range(count)]
+
+
 def estimate_visual_tags(frame: np.ndarray) -> List[str]:
     tags: List[str] = []
 
@@ -109,8 +119,8 @@ def estimate_visual_tags(frame: np.ndarray) -> List[str]:
     return tags
 
 
-def estimate_effect_tags(frame: np.ndarray) -> List[str]:
-    tags: List[str] = []
+def estimate_effect_scores(frame: np.ndarray) -> Dict[str, float]:
+    scores: Dict[str, float] = {}
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -119,23 +129,22 @@ def estimate_effect_tags(frame: np.ndarray) -> List[str]:
 
     warm_mask = cv2.inRange(hsv, (0, 110, 120), (35, 255, 255))
     warm_ratio = float(np.count_nonzero(warm_mask)) / warm_mask.size
-    if warm_ratio > 0.22 and val > 120:
-        tags.append("火焰/爆炸特效")
+    scores["火焰/爆炸特效"] = max(0.0, min(1.0, (warm_ratio - 0.12) * 3.2 + (val - 100) / 255.0))
 
     blue_mask = cv2.inRange(hsv, (90, 90, 80), (130, 255, 255))
     blue_ratio = float(np.count_nonzero(blue_mask)) / blue_mask.size
-    if blue_ratio > 0.28:
-        tags.append("冷色科幻特效")
+    scores["冷色科幻特效"] = max(0.0, min(1.0, (blue_ratio - 0.15) * 3.0))
 
     low_sat = sat < 45 and 90 < val < 185
     blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-    if low_sat and blur_score < 120:
-        tags.append("烟雾/雾化特效")
+    scores["烟雾/雾化特效"] = 0.75 if low_sat and blur_score < 120 else 0.1
+    scores["运动模糊/高速运动"] = max(0.0, min(1.0, (120 - blur_score) / 120))
 
-    if blur_score < 80:
-        tags.append("运动模糊/高速运动")
+    return scores
 
-    return tags
+
+def pick_effects(scores: Dict[str, float], threshold: float = 0.45) -> List[str]:
+    return sorted([k for k, v in scores.items() if v >= threshold])
 
 
 def extract_frame_at(video_path: Path, sec: float) -> np.ndarray:
