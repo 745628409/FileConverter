@@ -1,5 +1,30 @@
 # MacOS Shot Finder（适配 macOS 10.14）
 
+
+## 零、先确认你下载的是“完整项目”
+
+如果终端提示 `No such file or directory`，通常是你当前目录不对，或者还没下载完整项目。
+
+### 最稳妥步骤（复制执行）
+
+```bash
+# 1) 下载源码（示例）
+git clone <你的仓库地址> FileConverter
+
+# 2) 进入仓库根目录
+cd FileConverter
+
+# 3) 看看目录里有没有 MacOSShotFinder
+ls
+
+# 4) 一键启动（推荐）
+./quick_start_macos.sh
+```
+
+如果第 3 步 `ls` 看不到 `MacOSShotFinder`，那就是下载内容不完整（或路径进错了）。
+
+---
+
 你要的“安装包”方案我已经补上了：可直接生成 `dmg`，双击后拖到 `Applications` 安装。
 
 ---
