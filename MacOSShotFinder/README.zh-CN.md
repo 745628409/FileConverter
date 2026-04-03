@@ -60,3 +60,34 @@ python src/app.py
 
 > 说明：
 > - “演员级识别”“高精度特效分类”需要加专门模型，可在 `src/pipeline.py` 的 `build_feature_text` 和标签阶段继续扩展。
+
+
+---
+
+## 五、常见报错
+
+### `-bash: cd: MacOSShotFinder: No such file or directory`
+
+这表示你当前所在目录里没有 `MacOSShotFinder` 文件夹。可以这样做：
+
+```bash
+# 先进入 FileConverter 仓库根目录
+cd /你的路径/FileConverter
+
+# 再进入子目录
+cd MacOSShotFinder
+```
+
+或者直接用仓库根目录的一键脚本（推荐）：
+
+```bash
+cd /你的路径/FileConverter
+./build_shotfinder_dmg.sh
+```
+
+如果你不确定当前目录，可先执行：
+
+```bash
+pwd
+ls
+```
