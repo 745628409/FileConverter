@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, List, Set
+import os
 import re
 import numpy as np
 
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
+
+
+# 隐私优先：默认关闭 HuggingFace/Transformers 联网能力与遥测
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 from models import IndexData, Shot
 from recognition import detect_actor_scores, load_actor_references, pick_actors
@@ -27,7 +34,7 @@ def try_transcribe(video_path: Path):
     except Exception:
         return []
 
-    model = WhisperModel("small", device="cpu", compute_type="int8")
+    model = WhisperModel("small", device="cpu", compute_type="int8", local_files_only=True)
     segments, _ = model.transcribe(str(video_path), beam_size=5)
     rows = []
     for seg in segments:
@@ -95,7 +102,7 @@ def build_index(video_path: Path, project_dir: Path, high_accuracy: bool = True)
     segments = try_transcribe(video_path)
     actor_refs = load_actor_references(project_dir / "actors")
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", local_files_only=True)
 
     shots: List[Shot] = []
     feature_texts: List[str] = []
@@ -201,7 +208,7 @@ def search(index_data: IndexData, query: str, top_k: int = 12):
     if not index_data.shots:
         return []
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", local_files_only=True)
     q_emb = model.encode([query], normalize_embeddings=True)[0]
     sem_sims = np.array(index_data.embeddings) @ q_emb
 
