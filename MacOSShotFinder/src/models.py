@@ -15,6 +15,8 @@ class Shot:
     thumbnail_path: str
     transcript: str
     tags: List[str]
+    actors: List[str]
+    effects: List[str]
     feature_text: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -22,6 +24,8 @@ class Shot:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Shot":
+        data.setdefault("actors", [])
+        data.setdefault("effects", [])
         return cls(**data)
 
 
@@ -30,6 +34,7 @@ class IndexData:
     video_path: str
     shots: List[Shot]
     embeddings: List[List[float]]
+    feature_texts: List[str]
 
     def save(self, output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -37,6 +42,7 @@ class IndexData:
             "video_path": self.video_path,
             "shots": [s.to_dict() for s in self.shots],
             "embeddings": self.embeddings,
+            "feature_texts": self.feature_texts,
         }
         (output_dir / "index.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -47,4 +53,12 @@ class IndexData:
     def load(cls, project_dir: Path) -> "IndexData":
         payload = json.loads((project_dir / "index.json").read_text(encoding="utf-8"))
         shots = [Shot.from_dict(item) for item in payload["shots"]]
-        return cls(video_path=payload["video_path"], shots=shots, embeddings=payload["embeddings"])
+        feature_texts = payload.get("feature_texts")
+        if not feature_texts:
+            feature_texts = [s.feature_text for s in shots]
+        return cls(
+            video_path=payload["video_path"],
+            shots=shots,
+            embeddings=payload["embeddings"],
+            feature_texts=feature_texts,
+        )

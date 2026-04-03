@@ -1,6 +1,5 @@
 # MacOS Shot Finder（适配 macOS 10.14）
 
-
 ## 零、先确认你下载的是“完整项目”
 
 如果终端提示 `No such file or directory`，通常是你当前目录不对，或者还没下载完整项目。
@@ -64,7 +63,53 @@ MacOSShotFinder/release/MacOSShotFinder-macOS10.14.dmg
 
 ---
 
-## 三、开发/调试启动
+## 三、演员识别（新增）
+
+为了识别“某个演员镜头”，请在项目目录准备演员样本：
+
+```text
+<你的project目录>/actors/
+  ├── actor_张三/
+  │    ├── 1.jpg
+  │    └── 2.jpg
+  ├── actor_李四/
+  │    ├── 1.jpg
+  │    └── 2.jpg
+```
+
+然后重新执行 `index`。检索时可直接搜演员名，比如：
+- `actor_张三 近景 反应镜头`
+- `actor_李四 台词`
+
+---
+
+## 四、特效检索（新增）
+
+当前已支持的特效标签：
+- 火焰/爆炸特效
+- 冷色科幻特效
+- 烟雾/雾化特效
+- 运动模糊/高速运动
+
+可直接搜索：
+- `爆炸 特效 动作段落`
+- `烟雾 低角度`
+- `科幻 蓝光`
+
+---
+
+## 五、检索准确度增强（新增）
+
+当前检索采用**混合排序**，不再只看语义向量：
+1. 语义向量相似度（sentence-transformers）
+2. 关键词 TF-IDF 相似度
+3. 结构化加权（演员命中/特效命中/关键词命中）
+
+这样对“演员 + 特效 + 镜头语义”的组合查询准确度更高。
+
+---
+
+## 六、开发/调试启动
 
 ```bash
 cd MacOSShotFinder
@@ -72,47 +117,4 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python src/app.py
-```
-
----
-
-## 四、支持的能力（当前版本）
-
-- 导入视频并自动切镜头
-- 每个镜头提取缩略图 + 时间点
-- 可选台词转写（faster-whisper）
-- 检索：支持“叙事台词 / 景别 / 角度 / 光影 / 动作段落”等关键词或自然语言
-
-> 说明：
-> - “演员级识别”“高精度特效分类”需要加专门模型，可在 `src/pipeline.py` 的 `build_feature_text` 和标签阶段继续扩展。
-
-
----
-
-## 五、常见报错
-
-### `-bash: cd: MacOSShotFinder: No such file or directory`
-
-这表示你当前所在目录里没有 `MacOSShotFinder` 文件夹。可以这样做：
-
-```bash
-# 先进入 FileConverter 仓库根目录
-cd /你的路径/FileConverter
-
-# 再进入子目录
-cd MacOSShotFinder
-```
-
-或者直接用仓库根目录的一键脚本（推荐）：
-
-```bash
-cd /你的路径/FileConverter
-./build_shotfinder_dmg.sh
-```
-
-如果你不确定当前目录，可先执行：
-
-```bash
-pwd
-ls
 ```

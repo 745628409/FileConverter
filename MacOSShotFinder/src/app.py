@@ -118,6 +118,8 @@ class ShotFinderApp:
                 f"score: {row['score']:.3f}\n"
                 f"时间: {sec_to_timecode(shot.start_sec)} - {sec_to_timecode(shot.end_sec)}\n"
                 f"标签: {', '.join(shot.tags)}\n"
+                f"演员: {', '.join(shot.actors) if shot.actors else '(未识别)'}\n"
+                f"特效: {', '.join(shot.effects) if shot.effects else '(无明显特效)'}\n"
                 f"台词: {shot.transcript or '(无)'}"
             )
             ttk.Label(card, text=info, justify=tk.LEFT).pack(side=tk.LEFT, padx=10)

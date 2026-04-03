@@ -36,6 +36,8 @@ def main():
                 f"{sec_to_timecode(shot.start_sec)} - {sec_to_timecode(shot.end_sec)}  "
                 f"thumb={shot.thumbnail_path}\n"
                 f"tags={','.join(shot.tags)}\n"
+                f"actors={','.join(shot.actors)}\n"
+                f"effects={','.join(shot.effects)}\n"
                 f"transcript={shot.transcript}\n"
             )
 

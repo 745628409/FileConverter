@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 import cv2
 import numpy as np
 
@@ -105,6 +105,35 @@ def estimate_visual_tags(frame: np.ndarray) -> List[str]:
         tags.append("画面复杂/可能动作段落")
     else:
         tags.append("画面平稳/可能叙事段落")
+
+    return tags
+
+
+def estimate_effect_tags(frame: np.ndarray) -> List[str]:
+    tags: List[str] = []
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    sat = float(hsv[:, :, 1].mean())
+    val = float(hsv[:, :, 2].mean())
+
+    warm_mask = cv2.inRange(hsv, (0, 110, 120), (35, 255, 255))
+    warm_ratio = float(np.count_nonzero(warm_mask)) / warm_mask.size
+    if warm_ratio > 0.22 and val > 120:
+        tags.append("火焰/爆炸特效")
+
+    blue_mask = cv2.inRange(hsv, (90, 90, 80), (130, 255, 255))
+    blue_ratio = float(np.count_nonzero(blue_mask)) / blue_mask.size
+    if blue_ratio > 0.28:
+        tags.append("冷色科幻特效")
+
+    low_sat = sat < 45 and 90 < val < 185
+    blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+    if low_sat and blur_score < 120:
+        tags.append("烟雾/雾化特效")
+
+    if blur_score < 80:
+        tags.append("运动模糊/高速运动")
 
     return tags
 
